@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Somersault Range Dashboard</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js Date Adapter & Luxon for time-series charts -->
+    <script src="https://cdn.jsdelivr.net/npm/luxon@^2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@^1"></script>
+    <style>
+        /* Custom styles for a polished look */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        .metric-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        /* Loading Spinner */
+        .loader {
+            border: 8px solid #f3f3f3; /* Light grey */
+            border-top: 8px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <!-- Google Fonts for a modern typeface -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="loader"></div>
+    </div>
+
+    <div class="container mx-auto p-4 md:p-8">
+        <!-- Dashboard Header -->
+        <header class="mb-8">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">Somersault Range Dashboard</h1>
+                    <p class="text-gray-600 mt-1">Key Performance Indicators for Big W</p>
+                </div>
+                <div id="filter-notification" class="mt-4 md:mt-0 text-sm font-semibold text-blue-600 bg-blue-100 rounded-full px-4 py-2 hidden items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clip-rule="evenodd" /></svg>
+                    <span id="filter-text"></span>
+                    <button id="reset-filter-btn" class="ml-3 text-blue-800 hover:text-blue-900">&times;</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters Section -->
+        <div class="bg-white p-4 rounded-xl shadow-md mb-8 flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4 flex-wrap">
+            <div class="flex items-center space-x-2">
+                <label for="startDate" class="font-semibold">Date Range:</label>
+                <input type="date" id="startDate" class="border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500">
+                <span class="text-gray-500">to</span>
+                <input type="date" id="endDate" class="border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500">
+            </div>
+             <div class="flex items-center space-x-2">
+                <label for="stateFilter" class="font-semibold">State:</label>
+                <select id="stateFilter" class="border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 w-36"></select>
+            </div>
+            <div class="flex items-center space-x-2">
+                <label for="storeFilter" class="font-semibold">Store:</label>
+                <select id="storeFilter" class="border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 w-48"></select>
+            </div>
+        </div>
+
+        <!-- Main Dashboard Grid -->
+        <div class="grid grid-cols-1 gap-8">
+            
+            <!-- Sales Performance Section -->
+            <section id="sales-performance">
+                <h2 class="text-2xl font-semibold mb-4">Sales Performance</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                    <div class="metric-card bg-white p-6 rounded-xl shadow-md">
+                        <h3 class="text-gray-500">Total Sales (QTD)</h3>
+                        <p id="totalSales" class="text-3xl font-bold mt-2">0</p>
+                    </div>
+                    <div class="metric-card bg-white p-6 rounded-xl shadow-md">
+                        <h3 class="text-gray-500">Total Revenue (QTD)</h3>
+                        <p id="totalRevenue" class="text-3xl font-bold mt-2">$0</p>
+                    </div>
+                    <div class="metric-card bg-white p-6 rounded-xl shadow-md">
+                        <h3 class="text-gray-500">Avg. Revenue/Sale (QTD)</h3>
+                        <p id="avgRevenue" class="text-3xl font-bold mt-2">$0.00</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-xl shadow-md">
+                        <h3 class="font-semibold mb-4">Daily Revenue</h3>
+                        <div class="chart-container"><canvas id="dailyRevenueChart"></canvas></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-md">
+                        <h3 class="font-semibold mb-4">Top 10 Products by Revenue</h3>
+                        <div class="chart-container"><canvas id="topProductsChart"></canvas></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Product Satisfaction Section -->
+            <section id="product-satisfaction">
+                <h2 class="text-2xl font-semibold mb-4 mt-8">Product Satisfaction</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-xl shadow-md">
+                        <h3 class="font-semibold mb-4">Avg. Star Rating</h3>
+                        <div class="chart-container flex items-center justify-center">
+                            <p id="avgRating" class="text-6xl font-bold text-yellow-500">0.0</p>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-md">
+                        <h3 class="font-semibold mb-4">Rating Breakdown</h3>
+                        <div class="chart-container"><canvas id="ratingDonutChart"></canvas></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-md">
+                        <h3 class="font-semibold mb-4">Avg. Rating by Category</h3>
+                        <div class="chart-container"><canvas id="avgRatingByCategoryChart"></canvas></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Customer Satisfaction Section -->
+            <section id="customer-satisfaction">
+                <h2 class="text-2xl font-semibold mb-4 mt-8">Customer Satisfaction</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-xl shadow-md">
+                        <h3 class="font-semibold mb-4">CSAT & NPS</h3>
+                        <div class="grid grid-cols-2 gap-4 h-full">
+                            <div class="chart-container"><canvas id="csatGauge"></canvas></div>
+                            <div class="chart-container"><canvas id="npsGauge"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-md">
+                        <h3 class="font-semibold mb-4">NPS Trend</h3>
+                        <div class="chart-container"><canvas id="npsTrendChart"></canvas></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- CONFIGURATION ---
+        const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbz0S3-OvtgXfuo_gbFJeDnxXIgknANosbIcVm40id94d40s8jiUWPNcTkvLo6X33WRN/exec';
+
+        let allData = [];
+        let chartInstances = {};
+        let currentProductFilter = null;
+
+        // --- DATA FETCHING AND PROCESSING ---
+        const fetchData = async () => {
+            const loadingOverlay = document.getElementById('loading-overlay');
+            loadingOverlay.style.display = 'flex';
+
+            if (GOOGLE_SHEET_URL === 'PASTE_YOUR_URL_HERE') {
+                alert('Please update the GOOGLE_SHEET_URL in the HTML file with your Google Apps Script URL.');
+                loadingOverlay.style.display = 'none';
+                return;
+            }
+
+            try {
+                const response = await fetch(GOOGLE_SHEET_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const jsonData = await response.json();
+                allData = processData(jsonData);
+                initializeDashboard();
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                alert("Failed to fetch data from Google Sheet. Please check the URL and make sure the script is deployed correctly.");
+            } finally {
+                loadingOverlay.style.display = 'none';
+            }
+        };
+
+        const processData = (data) => {
+            const numericHeaders = ['Quantity Sold', 'Price', 'Total Revenue', 'Product Cost', 'Rating', 'CSAT Score (1-5)', 'NPS Score (0-10)'];
+            const dateHeaders = ['Date of Sale', 'Date of Review', 'Date of Return'];
+
+            return data.map(row => {
+                const processedRow = { ...row };
+                for (const header of numericHeaders) {
+                    processedRow[header] = parseFloat(processedRow[header]) || 0;
+                }
+                for (const header of dateHeaders) {
+                    processedRow[header] = processedRow[header] ? luxon.DateTime.fromISO(processedRow[header]) : null;
+                }
+                return processedRow;
+            });
+        };
+
+        // --- INITIALIZATION ---
+        const initializeDashboard = () => {
+            if (!allData || allData.length === 0) {
+                console.error("No data available to initialize dashboard.");
+                return;
+            }
+            setupFilters();
+            createCharts();
+            updateDashboard();
+        };
+
+        // --- FILTER SETUP ---
+        const setupFilters = () => {
+            const startDateEl = document.getElementById('startDate');
+            const endDateEl = document.getElementById('endDate');
+            const stateFilterEl = document.getElementById('stateFilter');
+            const storeFilterEl = document.getElementById('storeFilter');
+            const resetBtn = document.getElementById('reset-filter-btn');
+
+            // Date filter setup
+            const dates = allData.map(d => d['Date of Sale']).filter(Boolean);
+            const maxDate = luxon.DateTime.max(...dates);
+            const minDate = maxDate.minus({ days: 90 });
+            startDateEl.value = minDate.toISODate();
+            endDateEl.value = maxDate.toISODate();
+
+            // State and Store filter setup
+            const populateDropdown = (element, options, defaultLabel) => {
+                element.innerHTML = `<option value="All">${defaultLabel}</option>`;
+                options.forEach(option => {
+                    const opt = document.createElement('option');
+                    opt.value = option;
+                    opt.textContent = option;
+                    element.appendChild(opt);
+                });
+            };
+
+            const uniqueStates = [...new Set(allData.map(item => item['State/Region']))].sort();
+            populateDropdown(stateFilterEl, uniqueStates, 'All States');
+
+            const updateStoreFilter = () => {
+                const selectedState = stateFilterEl.value;
+                const storesInState = [...new Set(
+                    allData
+                        .filter(item => selectedState === 'All' || item['State/Region'] === selectedState)
+                        .map(item => item['Store Name'])
+                )].sort();
+                populateDropdown(storeFilterEl, storesInState, 'All Stores');
+            };
+
+            updateStoreFilter(); // Initial population of store filter
+
+            // Event Listeners
+            [startDateEl, endDateEl, storeFilterEl].forEach(el => el.addEventListener('change', updateDashboard));
+            
+            stateFilterEl.addEventListener('change', () => {
+                updateStoreFilter();
+                updateDashboard();
+            });
+
+            resetBtn.addEventListener('click', () => {
+                currentProductFilter = null;
+                updateDashboard();
+            });
+        };
+        
+        // --- DATA FILTERING LOGIC ---
+        const getFilteredData = () => {
+            const startDate = luxon.DateTime.fromISO(document.getElementById('startDate').value);
+            const endDate = luxon.DateTime.fromISO(document.getElementById('endDate').value).endOf('day');
+            const selectedState = document.getElementById('stateFilter').value;
+            const selectedStore = document.getElementById('storeFilter').value;
+            
+            let data = allData.filter(d => {
+                const dateMatch = d['Date of Sale'] && d['Date of Sale'] >= startDate && d['Date of Sale'] <= endDate;
+                const stateMatch = selectedState === 'All' || d['State/Region'] === selectedState;
+                const storeMatch = selectedStore === 'All' || d['Store Name'] === selectedStore;
+                return dateMatch && stateMatch && storeMatch;
+            });
+
+            if (currentProductFilter) {
+                data = data.filter(d => d['Product Name'] === currentProductFilter);
+                document.getElementById('filter-notification').classList.remove('hidden');
+                document.getElementById('filter-notification').classList.add('flex');
+                document.getElementById('filter-text').textContent = `Filtered by: ${currentProductFilter}`;
+            } else {
+                document.getElementById('filter-notification').classList.add('hidden');
+            }
+            
+            return data;
+        };
+
+        // --- CHART CREATION ---
+        const createCharts = () => {
+            chartInstances.dailyRevenue = createLineChart('dailyRevenueChart');
+            chartInstances.topProducts = createBarChart('topProductsChart', 'y', handleProductClick);
+            chartInstances.ratingDonut = createDonutChart('ratingDonutChart');
+            chartInstances.avgRatingByCategory = createBarChart('avgRatingByCategoryChart', 'y');
+            chartInstances.csatGauge = createGaugeChart('csatGauge', 'CSAT', 1, 5);
+            chartInstances.npsGauge = createGaugeChart('npsGauge', 'NPS', -100, 100);
+            chartInstances.npsTrend = createLineChart('npsTrendChart');
+        };
+
+        // --- DASHBOARD UPDATE ---
+        const updateDashboard = () => {
+            const data = getFilteredData();
+            updateSalesMetrics(data);
+            updateProductMetrics(data);
+            updateCustomerMetrics(data);
+        };
+        
+        // --- METRIC UPDATE FUNCTIONS ---
+        const updateSalesMetrics = (data) => {
+            const now = luxon.DateTime.now();
+            const qtdData = data.filter(d => d['Date of Sale'] && d['Date of Sale'].quarter === now.quarter && d['Date of Sale'].year === now.year);
+            
+            const totalSales = qtdData.reduce((sum, item) => sum + item['Quantity Sold'], 0);
+            const totalRevenue = qtdData.reduce((sum, item) => sum + item['Total Revenue'], 0);
+            const avgRevenue = qtdData.length > 0 ? totalRevenue / qtdData.length : 0;
+
+            document.getElementById('totalSales').textContent = totalSales.toLocaleString();
+            document.getElementById('totalRevenue').textContent = `$${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            document.getElementById('avgRevenue').textContent = `$${avgRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            
+            const dailyRevenue = data.reduce((acc, item) => {
+                const date = item['Date of Sale'].toISODate();
+                acc[date] = (acc[date] || 0) + item['Total Revenue'];
+                return acc;
+            }, {});
+            const sortedDates = Object.keys(dailyRevenue).sort();
+            chartInstances.dailyRevenue.data.labels = sortedDates;
+            chartInstances.dailyRevenue.data.datasets[0].data = sortedDates.map(date => dailyRevenue[date]);
+            chartInstances.dailyRevenue.update();
+
+            const productRevenue = data.reduce((acc, item) => {
+                const name = item['Product Name'];
+                acc[name] = (acc[name] || 0) + item['Total Revenue'];
+                return acc;
+            }, {});
+            const top10Products = Object.entries(productRevenue)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 10);
+            chartInstances.topProducts.data.labels = top10Products.map(p => p[0]);
+            chartInstances.topProducts.data.datasets[0].data = top10Products.map(p => p[1]);
+            chartInstances.topProducts.update();
+        };
+
+        const updateProductMetrics = (data) => {
+            const totalRating = data.reduce((sum, item) => sum + item['Rating'], 0);
+            const ratingsWithData = data.filter(item => item['Rating'] > 0).length;
+            const avgRating = ratingsWithData > 0 ? totalRating / ratingsWithData : 0;
+            document.getElementById('avgRating').textContent = avgRating.toFixed(1);
+
+            const ratingCounts = data.reduce((acc, item) => {
+                if (item['Rating'] > 0) {
+                    const rating = `${item['Rating']}-Star`;
+                    acc[rating] = (acc[rating] || 0) + 1;
+                }
+                return acc;
+            }, {});
+            chartInstances.ratingDonut.data.labels = Object.keys(ratingCounts);
+            chartInstances.ratingDonut.data.datasets[0].data = Object.values(ratingCounts);
+            chartInstances.ratingDonut.update();
+
+            const categoryRatings = data.reduce((acc, item) => {
+                 if (item['Rating'] > 0) {
+                    const category = item['Product Category'];
+                    if (!acc[category]) {
+                        acc[category] = { total: 0, count: 0 };
+                    }
+                    acc[category].total += item['Rating'];
+                    acc[category].count += 1;
+                }
+                return acc;
+            }, {});
+            const avgCategoryRatings = Object.entries(categoryRatings).map(([category, { total, count }]) => ({
+                category,
+                avg: total / count
+            }));
+            chartInstances.avgRatingByCategory.data.labels = avgCategoryRatings.map(c => c.category);
+            chartInstances.avgRatingByCategory.data.datasets[0].data = avgCategoryRatings.map(c => c.avg);
+            chartInstances.avgRatingByCategory.update();
+        };
+
+        const updateCustomerMetrics = (data) => {
+            const csatData = data.filter(d => d['CSAT Score (1-5)'] > 0);
+            const totalCsat = csatData.reduce((sum, item) => sum + item['CSAT Score (1-5)'], 0);
+            const avgCsat = csatData.length > 0 ? totalCsat / csatData.length : 0;
+            updateGauge(chartInstances.csatGauge, avgCsat);
+            
+            const npsData = data.filter(d => d['NPS Score (0-10)'] != null);
+            const promoters = npsData.filter(d => d['NPS Score (0-10)'] >= 9).length;
+            const detractors = npsData.filter(d => d['NPS Score (0-10)'] <= 6).length;
+            const nps = npsData.length > 0 ? ((promoters - detractors) / npsData.length) * 100 : 0;
+            updateGauge(chartInstances.npsGauge, nps);
+
+            const trendData = data.filter(d => d['Date of Review']);
+            const monthlyNps = trendData.reduce((acc, item) => {
+                if (item['NPS Score (0-10)'] != null) {
+                    const month = item['Date of Review'].toFormat('yyyy-MM');
+                    if (!acc[month]) {
+                        acc[month] = { promoters: 0, detractors: 0, total: 0 };
+                    }
+                    if (item['NPS Score (0-10)'] >= 9) acc[month].promoters++;
+                    if (item['NPS Score (0-10)'] <= 6) acc[month].detractors++;
+                    acc[month].total++;
+                }
+                return acc;
+            }, {});
+            const sortedMonths = Object.keys(monthlyNps).sort();
+            const npsScores = sortedMonths.map(month => {
+                const { promoters, detractors, total } = monthlyNps[month];
+                return total > 0 ? ((promoters - detractors) / total) * 100 : 0;
+            });
+            chartInstances.npsTrend.data.labels = sortedMonths;
+            chartInstances.npsTrend.data.datasets[0].data = npsScores;
+            chartInstances.npsTrend.update();
+        };
+
+        // --- CHART HELPER FUNCTIONS ---
+        const createLineChart = (canvasId) => {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ data: [], borderColor: '#3b82f6', borderWidth: 2, fill: false, tension: 0.1 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { type: 'time', time: { unit: 'day', tooltipFormat: 'DD T' } } } }
+            });
+        };
+
+        const createBarChart = (canvasId, axis = 'x', onClick) => {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'bar',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: '#60a5fa', borderRadius: 4 }] },
+                options: { indexAxis: axis, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, onClick: onClick }
+            });
+        };
+
+        const createDonutChart = (canvasId) => {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: ['#22c55e', '#84cc16', '#facc15', '#fb923c', '#ef4444'] }] },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        };
+        
+        const createGaugeChart = (canvasId, label, min, max) => {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: [label, ''],
+                    datasets: [{
+                        data: [0, max],
+                        backgroundColor: ['#3b82f6', '#e5e7eb'],
+                        circumference: 180,
+                        rotation: 270,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false },
+                        title: { display: true, text: label, position: 'bottom' }
+                    },
+                    cutout: '80%'
+                },
+                plugins: [{
+                    id: 'gaugeText',
+                    afterDraw: (chart) => {
+                        const { ctx, data, chartArea: { top, bottom, left, right, width, height } } = chart;
+                        ctx.save();
+                        const value = data.datasets[0].data[0];
+                        ctx.font = 'bold 24px Inter';
+                        ctx.textAlign = 'center';
+                        ctx.fillStyle = '#1f2937';
+                        ctx.fillText(value.toFixed(1), width / 2, height / 2 + top + 15);
+                        ctx.restore();
+                    }
+                }]
+            });
+        };
+        
+        const updateGauge = (chart, value) => {
+            const max = chart.data.datasets[0].data[1];
+            chart.data.datasets[0].data[0] = value;
+            chart.data.datasets[0].data[1] = max - value;
+            chart.update('none');
+        };
+
+        // --- INTERACTIVITY HANDLERS ---
+        const handleProductClick = (event, elements) => {
+            if (elements.length > 0) {
+                const chart = elements[0].chart;
+                const index = elements[0].index;
+                const productName = chart.data.labels[index];
+                
+                if (currentProductFilter === productName) {
+                    currentProductFilter = null; // Toggle off if clicked again
+                } else {
+                    currentProductFilter = productName;
+                }
+                updateDashboard();
+            }
+        };
+
+        // --- START THE APP ---
+        fetchData();
+    });
+    </script>
+</body>
+</html>
