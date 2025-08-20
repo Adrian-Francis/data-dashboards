@@ -1,1 +1,1 @@
-Data dashbiard demo
+Data dashboard demo
